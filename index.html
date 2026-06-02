@@ -81,10 +81,10 @@ let chartInstance = null;
 function csvUrl(gid){ return `${BASE}?gid=${gid}&single=true&output=csv`; }
 
 function parseCSV(text){
-  return text.trim().split('\n').map(r=>{
+  return text.trim().replace(/\r/g,'').split('\n').map(r=>{
     const cols=[];let cur='',inQ=false;
     for(let c of r){if(c==='"'){inQ=!inQ}else if(c===','&&!inQ){cols.push(cur.trim());cur=''}else{cur+=c}}
-    cols.push(cur.trim());return cols;
+    cols.push(cur.trim().replace(/\r/g,""));return cols;
   });
 }
 
