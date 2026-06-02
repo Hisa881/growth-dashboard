@@ -51,7 +51,11 @@ h1{font-size:15px;font-weight:500;color:#555;margin-bottom:1rem}
     <button class="tab-btn active" onclick="setMetric('幹径',this)">幹径</button>
     <button class="tab-btn" onclick="setMetric('全長',this)">全長</button>
     <button class="tab-btn" onclick="setMetric('幹径高さ',this)">幹径位置高さ</button>
-    <button class="reload-btn" onclick="loadAll()">↻ 更新</button>
+    <div style="display:flex;gap:6px;margin-left:auto;align-items:center;">
+      <button class="tab-btn" id="btnAll" onclick="setRange('all',this)">全期間</button>
+      <button class="tab-btn active" id="btnBase" onclick="setRange('base',this)">基準日以降</button>
+      <button class="reload-btn" onclick="loadAll()">↻ 更新</button>
+    </div>
   </div>
   <div class="chart-wrap">
     <div class="legend" id="legend"></div>
@@ -77,6 +81,7 @@ const METRIC_UNIT = {'幹径':'mm','全長':'mm','幹径高さ':'mm'};
 
 let state = { master:[], stem:{}, full:{}, height:{}, dates:[] };
 let currentMetric = '幹径';
+let currentRange = 'base';
 let chartInstance = null;
 
 function csvUrl(gid){ return `${BASE}?gid=${gid}&single=true&output=csv`; }
@@ -166,7 +171,11 @@ function deltaClass(v){ return v>0?'delta dp':v<0?'delta dn':'delta dz'; }
 function deltaLabel(v){ return v>0?`+${v}`:v===0?'±0':`${v}`; }
 
 function render(){
-  const {master, dates} = state;
+  const {master} = state;
+  const BASE_DATE_FILTER = '2026/05/30';
+  const dates = currentRange === 'base'
+    ? state.dates.filter(d => d >= BASE_DATE_FILTER)
+    : state.dates;
   if(!master.length || !dates.length) return;
   const unit = METRIC_UNIT[currentMetric];
 
@@ -305,6 +314,13 @@ function render(){
     `;
     grid.appendChild(card);
   });
+}
+
+function setRange(r,el){
+  currentRange=r;
+  document.querySelectorAll('#btnAll,#btnBase').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  render();
 }
 
 function setMetric(m,el){
