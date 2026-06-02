@@ -201,7 +201,24 @@ function render(){
     });
   });
 
+  const BASE_DATE_CHART = '2026/05/30';
+  const baseIdx = dates.indexOf(BASE_DATE_CHART);
+
   if(chartInstance) chartInstance.destroy();
+
+  if(baseIdx >= 0){
+    const refData = dates.map((_,i)=> i===baseIdx ? null : null);
+    datasets.push({
+      label:'基準日(5/30)',
+      data: dates.map(()=>null),
+      borderColor:'rgba(180,0,0,0.4)',
+      borderWidth:1,
+      borderDash:[3,3],
+      pointRadius:0,
+      spanGaps:false,
+    });
+  }
+
   chartInstance = new Chart(document.getElementById('mainChart'),{
     type:'line',
     data:{labels:dates.map(fmtDate), datasets},
@@ -210,6 +227,17 @@ function render(){
       plugins:{
         legend:{display:false},
         tooltip:{callbacks:{label:ctx=>{const v=ctx.parsed.y;return ` ${ctx.dataset.label}: ${v>0?'+':''}${v} ${unit}`}}}
+      },
+      plugins2:{
+        annotation:{
+          annotations:{
+            baseLine:{
+              type:'line', xMin: baseIdx, xMax: baseIdx,
+              borderColor:'rgba(200,0,0,0.4)', borderWidth:1, borderDash:[4,4],
+              label:{content:'基準日 5/30', enabled:true, position:'start', font:{size:10}}
+            }
+          }
+        }
       },
       scales:{
         y:{grid:{color:'rgba(0,0,0,0.06)'},ticks:{color:'#888',callback:v=>(v>0?'+':'')+v}},
@@ -234,6 +262,8 @@ function render(){
 
   const grid = document.getElementById('cardsGrid');
   grid.innerHTML='';
+  const BASE_DATE = '2026/05/30';
+
   master.forEach(m=>{
     const {num, condId, id, expId} = m;
     const bc = {'COND-001':'b001','COND-002':'b002','COND-003':'b003'}[condId]||'b001';
@@ -245,8 +275,10 @@ function render(){
     const latest    = getVal(num,lastDate);
     const first     = getVal(num,firstDate);
     const prev      = getVal(num,prevDate);
+    const baseVal   = getVal(num,BASE_DATE);
     const fromFirst = Math.round((latest-first)*10)/10;
     const fromPrev  = Math.round((latest-prev)*10)/10;
+    const fromBase  = baseVal!==null ? Math.round((latest-baseVal)*10)/10 : null;
 
     const card = document.createElement('div'); card.className='card';
     card.innerHTML=`
@@ -255,8 +287,15 @@ function render(){
       <div class="card-expid">${expId}</div>
       <div class="card-sub">${condId}</div>
       <div class="card-row"><span class="card-row-label">最新値</span><span class="card-val">${latest}<span style="font-size:11px;color:#bbb;margin-left:2px;">${unit}</span></span></div>
+      <div style="border-top:0.5px solid #f0f0f0;margin:6px 0;"></div>
+      <div style="font-size:10px;color:#bbb;margin-bottom:3px;">初回（${firstDate.replace('2026/','').replace(/\//,'/')}）からの変化</div>
       <div class="card-row"><span class="card-row-label">初回比</span><span class="${deltaClass(fromFirst)}">${deltaLabel(fromFirst)}</span></div>
       <div class="unit">${unit}</div>
+      <div style="border-top:0.5px solid #f0f0f0;margin:6px 0;"></div>
+      <div style="font-size:10px;color:#bbb;margin-bottom:3px;">基準日（5/30）からの変化</div>
+      <div class="card-row"><span class="card-row-label">基準日比</span><span class="${fromBase!==null?deltaClass(fromBase):'delta dz'}">${fromBase!==null?deltaLabel(fromBase):'データなし'}</span></div>
+      <div class="unit">${unit}</div>
+      <div style="border-top:0.5px solid #f0f0f0;margin:6px 0;"></div>
       <div class="card-row"><span class="card-row-label">前回比</span><span class="${deltaClass(fromPrev)}">${deltaLabel(fromPrev)}</span></div>
       <div class="unit">${unit}</div>
     `;
