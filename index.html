@@ -107,7 +107,7 @@ function parseMeasureSheet(rows){
   rows.slice(1).forEach(r=>{
     let dateRaw = r[0];
     const serial = parseFloat(dateRaw);
-    const date = isNaN(serial) ? dateRaw : excelDateToStr(serial);
+    const date = (!isNaN(serial) && serial > 40000 && !dateRaw.includes('/') && !dateRaw.includes('-')) ? excelDateToStr(serial) : dateRaw;
     nums.forEach((num,i)=>{
       if(!result[num]) result[num]={};
       const v = parseFloat(r[i+1]);
