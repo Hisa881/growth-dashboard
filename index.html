@@ -300,10 +300,12 @@ function render(){
       <div class="card-expid">${expId}</div>
       <div class="card-sub">${condId}</div>
       <div class="card-row"><span class="card-row-label">最新値</span><span class="card-val">${latest}<span style="font-size:11px;color:#bbb;margin-left:2px;">${unit}</span></span></div>
+      ${currentRange==='all' ? `
       <div style="border-top:0.5px solid #f0f0f0;margin:6px 0;"></div>
       <div style="font-size:10px;color:#bbb;margin-bottom:3px;">初回（${firstDate.replace('2026/','').replace(/\//,'/')}）からの変化</div>
       <div class="card-row"><span class="card-row-label">初回比</span><span class="${deltaClass(fromFirst)}">${deltaLabel(fromFirst)}</span></div>
       <div class="unit">${unit}</div>
+      ` : ''}
       <div style="border-top:0.5px solid #f0f0f0;margin:6px 0;"></div>
       <div style="font-size:10px;color:#bbb;margin-bottom:3px;">基準日（5/30）からの変化</div>
       <div class="card-row"><span class="card-row-label">基準日比</span><span class="${fromBase!==null?deltaClass(fromBase):'delta dz'}">${fromBase!==null?deltaLabel(fromBase):'データなし'}</span></div>
