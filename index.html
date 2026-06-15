@@ -20,8 +20,13 @@ h1{font-size:15px;font-weight:500;color:#555;margin-bottom:1rem}
 .legend{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:1rem}
 .legend-item{display:flex;align-items:center;gap:6px;font-size:12px;color:#666}
 .cards-label{font-size:12px;color:#888;margin-bottom:10px}
-.cards-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}@media(max-width:600px){.cards-grid{grid-template-columns:1fr}}
-.card{background:#fff;border-radius:12px;border:0.5px solid #e0e0e0;padding:14px 16px}
+.cards-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+@media(max-width:600px){.cards-grid{grid-template-columns:1fr}}
+.card{background:#fff;border-radius:12px;border:0.5px solid #e0e0e0;overflow:hidden}
+.card-photo{width:100%;height:140px;object-fit:cover;display:block;background:#f0f0f0;cursor:pointer;transition:opacity 0.2s}
+.card-photo:hover{opacity:0.85}
+.card-photo-placeholder{width:100%;height:140px;display:flex;align-items:center;justify-content:center;background:#f7f7f7;color:#ccc;font-size:12px;border-bottom:0.5px solid #f0f0f0}
+.card-body{padding:14px 16px}
 .card-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px}
 .card-num{font-size:12px;color:#888}
 .badge{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:500}
@@ -71,6 +76,10 @@ h1{font-size:15px;font-weight:500;color:#555;margin-bottom:1rem}
 const BASE = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRV6-RNtpsSi0q3kwPXcnLGeUu2uo4V1A4L3cN1GyoJzRRbcHNig7QZvIn9aQr9lnQDty7kGk8io2vM/pub';
 const GIDS = { master: '342452676', stem: '0', full: '1484510115', height: '461109111' };
 
+// 観察ログのGIDを追加（写真URL取得用）
+// ※ 観察ログシートの公開GIDに変更してください
+const LOG_GID = '1460240205';
+
 const COLORS = {
   'COND-001':{s:'#378add',d:'#85b7eb'},
   'COND-002':{s:'#1d9e75',d:'#5dcaa5'},
@@ -78,6 +87,9 @@ const COLORS = {
 };
 const IND_NUM = ['①','②','③','④','⑤','⑥'];
 const METRIC_UNIT = {'幹径':'mm','全長':'mm','幹径高さ':'mm'};
+
+// 写真URL: { "P-GRA-2311-001": "https://drive.google.com/..." }
+let photoMap = {};
 
 let state = { master:[], stem:{}, full:{}, height:{}, dates:[] };
 let currentMetric = '幹径';
@@ -123,6 +135,22 @@ function parseMeasureSheet(rows){
   return result;
 }
 
+// 観察ログCSVから写真URLを取得
+// 管理番号ごとに最新のURLを取得する
+function parsePhotoMap(rows){
+  const map = {};
+  // ヘッダー行をスキップ（1行目）
+  rows.slice(1).forEach(r => {
+    const plantId = r[2];  // C列：管理番号
+    const photoUrl = r[45]; // AT列（46列目、0始まりで45）
+    if(plantId && photoUrl && photoUrl.startsWith('http')){
+      // 同じ管理番号は後の行（新しい観察）で上書き → 最新URLが残る
+      map[plantId] = photoUrl;
+    }
+  });
+  return map;
+}
+
 function getDates(sheetData){
   const dateSet = new Set();
   Object.values(sheetData).forEach(byDate=>{
@@ -140,12 +168,20 @@ async function fetchCSV(gid){
 async function loadAll(){
   document.getElementById('cardsGrid').innerHTML='<div class="loading">データを読み込み中...</div>';
   try{
-    const [masterRows, stemRows, fullRows, heightRows] = await Promise.all([
+    const fetches = [
       fetchCSV(GIDS.master),
       fetchCSV(GIDS.stem),
       fetchCSV(GIDS.full),
       fetchCSV(GIDS.height),
-    ]);
+    ];
+
+    // 観察ログGIDが設定されていれば写真も取得
+    if(LOG_GID !== 'YOUR_LOG_GID_HERE'){
+      fetches.push(fetchCSV(LOG_GID));
+    }
+
+    const results = await Promise.all(fetches);
+    const [masterRows, stemRows, fullRows, heightRows, logRows] = results;
 
     state.master = masterRows.map(r=>({
       id: r[0], expId: r[1], condId: r[2], num: parseInt(r[3])
@@ -156,6 +192,8 @@ async function loadAll(){
     state.height = parseMeasureSheet(heightRows);
     state.dates  = getDates(state.stem);
 
+    if(logRows) photoMap = parsePhotoMap(logRows);
+
     render();
   }catch(e){
     document.getElementById('cardsGrid').innerHTML=`<div class="error">読み込みに失敗しました。スプレッドシートが公開設定か確認してください。</div>`;
@@ -164,9 +202,7 @@ async function loadAll(){
 }
 
 function getSheetData(){ return {'幹径':state.stem,'全長':state.full,'幹径高さ':state.height}[currentMetric]; }
-
 function getVal(num, date){ return getSheetData()?.[num]?.[date] ?? null; }
-
 function deltaClass(v){ return v>0?'delta dp':v<0?'delta dn':'delta dz'; }
 function deltaLabel(v){ return v>0?`+${v}`:v===0?'±0':`${v}`; }
 
@@ -216,25 +252,21 @@ function render(){
 
   if(chartInstance) chartInstance.destroy();
 
-  if(baseIdx >= 0){
-    const refData = dates.map((_,i)=> i===baseIdx ? null : null);
-    datasets.push({
-      label:'基準日(5/30)',
-      data: dates.map(()=>null),
-      borderColor:'rgba(180,0,0,0.4)',
-      borderWidth:1,
-      borderDash:[3,3],
-      pointRadius:0,
-      spanGaps:false,
-    });
-  }
+  datasets.push({
+    label:'基準日(5/30)',
+    data: dates.map(()=>null),
+    borderColor:'rgba(180,0,0,0.4)',
+    borderWidth:1,
+    borderDash:[3,3],
+    pointRadius:0,
+    spanGaps:false,
+  });
 
   chartInstance = new Chart(document.getElementById('mainChart'),{
     type:'line',
     data:{labels:dates.map(fmtDate), datasets},
     options:{
       responsive:true, maintainAspectRatio:false,
-
       plugins:{
         legend:{display:false},
         tooltip:{callbacks:{label:ctx=>{const v=ctx.parsed.y;return ` ${ctx.dataset.label}: ${v>0?'+':''}${v} ${unit}`}}},
@@ -293,26 +325,44 @@ function render(){
     const fromPrev  = Math.round((latest-prev)*10)/10;
     const fromBase  = baseVal!==null ? Math.round((latest-baseVal)*10)/10 : null;
 
+    // 写真URL取得
+    const photoUrl = photoMap[id] || null;
+
     const card = document.createElement('div'); card.className='card';
+
+    // 写真エリア
+    let photoHtml = '';
+    if(photoUrl){
+      photoHtml = `<a href="${photoUrl}" target="_blank" rel="noopener">
+        <img class="card-photo" src="${photoUrl}" alt="${id}" loading="lazy"
+          onerror="this.parentElement.outerHTML='<div class=\\'card-photo-placeholder\\'>写真なし</div>'">
+      </a>`;
+    } else {
+      photoHtml = `<div class="card-photo-placeholder">写真なし</div>`;
+    }
+
     card.innerHTML=`
-      <div class="card-header"><span class="card-num">${IND_NUM[num-1]}</span><span class="badge ${bc}">${condId}</span></div>
-      <div class="card-id">${id}</div>
-      <div class="card-expid">${expId}</div>
-      <div class="card-sub">${condId}</div>
-      <div class="card-row"><span class="card-row-label">最新値</span><span class="card-val">${latest}<span style="font-size:11px;color:#bbb;margin-left:2px;">${unit}</span></span></div>
-      ${currentRange==='all' ? `
-      <div style="border-top:0.5px solid #f0f0f0;margin:6px 0;"></div>
-      <div style="font-size:10px;color:#bbb;margin-bottom:3px;">初回（${firstDate.replace('2026/','').replace(/\//,'/')}）からの変化</div>
-      <div class="card-row"><span class="card-row-label">初回比</span><span class="${deltaClass(fromFirst)}">${deltaLabel(fromFirst)}</span></div>
-      <div class="unit">${unit}</div>
-      ` : ''}
-      <div style="border-top:0.5px solid #f0f0f0;margin:6px 0;"></div>
-      <div style="font-size:10px;color:#bbb;margin-bottom:3px;">基準日（5/30）からの変化</div>
-      <div class="card-row"><span class="card-row-label">基準日比</span><span class="${fromBase!==null?deltaClass(fromBase):'delta dz'}">${fromBase!==null?deltaLabel(fromBase):'データなし'}</span></div>
-      <div class="unit">${unit}</div>
-      <div style="border-top:0.5px solid #f0f0f0;margin:6px 0;"></div>
-      <div class="card-row"><span class="card-row-label">前回比</span><span class="${deltaClass(fromPrev)}">${deltaLabel(fromPrev)}</span></div>
-      <div class="unit">${unit}</div>
+      ${photoHtml}
+      <div class="card-body">
+        <div class="card-header"><span class="card-num">${IND_NUM[num-1]}</span><span class="badge ${bc}">${condId}</span></div>
+        <div class="card-id">${id}</div>
+        <div class="card-expid">${expId}</div>
+        <div class="card-sub">${condId}</div>
+        <div class="card-row"><span class="card-row-label">最新値</span><span class="card-val">${latest}<span style="font-size:11px;color:#bbb;margin-left:2px;">${unit}</span></span></div>
+        ${currentRange==='all' ? `
+        <div style="border-top:0.5px solid #f0f0f0;margin:6px 0;"></div>
+        <div style="font-size:10px;color:#bbb;margin-bottom:3px;">初回（${firstDate.replace('2026/','').replace(/\//,'/')}）からの変化</div>
+        <div class="card-row"><span class="card-row-label">初回比</span><span class="${deltaClass(fromFirst)}">${deltaLabel(fromFirst)}</span></div>
+        <div class="unit">${unit}</div>
+        ` : ''}
+        <div style="border-top:0.5px solid #f0f0f0;margin:6px 0;"></div>
+        <div style="font-size:10px;color:#bbb;margin-bottom:3px;">基準日（5/30）からの変化</div>
+        <div class="card-row"><span class="card-row-label">基準日比</span><span class="${fromBase!==null?deltaClass(fromBase):'delta dz'}">${fromBase!==null?deltaLabel(fromBase):'データなし'}</span></div>
+        <div class="unit">${unit}</div>
+        <div style="border-top:0.5px solid #f0f0f0;margin:6px 0;"></div>
+        <div class="card-row"><span class="card-row-label">前回比</span><span class="${deltaClass(fromPrev)}">${deltaLabel(fromPrev)}</span></div>
+        <div class="unit">${unit}</div>
+      </div>
     `;
     grid.appendChild(card);
   });
