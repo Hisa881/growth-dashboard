@@ -17,7 +17,6 @@ h1{font-size:15px;font-weight:500;color:#555;margin-bottom:1rem}
 .tab-btn.active{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
 .reload-btn{font-size:12px;padding:5px 12px;border-radius:8px;border:0.5px solid #ccc;background:#fff;color:#666;cursor:pointer;margin-left:auto}
 .chart-wrap{background:#fff;border-radius:12px;border:0.5px solid #e0e0e0;padding:1rem 1.25rem;margin-bottom:1rem}
-.chart-title{font-size:12px;color:#888;margin-bottom:10px}
 .legend{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:1rem}
 .legend-item{display:flex;align-items:center;gap:6px;font-size:12px;color:#666}
 .cards-label{font-size:12px;color:#888;margin-bottom:10px}
@@ -52,9 +51,6 @@ h1{font-size:15px;font-weight:500;color:#555;margin-bottom:1rem}
     <button class="tab-btn active" onclick="setMetric('幹径',this)">幹径</button>
     <button class="tab-btn" onclick="setMetric('全長',this)">全長</button>
     <button class="tab-btn" onclick="setMetric('幹径高さ',this)">幹径位置高さ</button>
-    <span class="toolbar-label" style="margin-left:8px;">表示：</span>
-    <button class="tab-btn active" id="btnDelta" onclick="setMode('delta',this)">変化量</button>
-    <button class="tab-btn" id="btnAbs" onclick="setMode('abs',this)">実測値</button>
     <div style="display:flex;gap:6px;margin-left:auto;align-items:center;">
       <button class="tab-btn" id="btnAll" onclick="setRange('all',this)">全期間</button>
       <button class="tab-btn active" id="btnBase" onclick="setRange('base',this)">基準日以降</button>
@@ -62,7 +58,6 @@ h1{font-size:15px;font-weight:500;color:#555;margin-bottom:1rem}
     </div>
   </div>
   <div class="chart-wrap">
-    <div class="chart-title" id="chartTitle">変化量（初回値からの差分）</div>
     <div class="legend" id="legend"></div>
     <div style="position:relative;width:100%;height:280px;">
       <canvas id="mainChart" role="img" aria-label="成長モニタリング折れ線グラフ"></canvas>
@@ -87,8 +82,12 @@ const METRIC_UNIT = {'幹径':'mm','全長':'mm','幹径高さ':'mm'};
 let state = { master:[], stem:{}, full:{}, height:{}, dates:[] };
 let currentMetric = '幹径';
 let currentRange = 'base';
-let currentMode = 'delta'; // 'delta' = 変化量, 'abs' = 実測値
 let chartInstance = null;
+
+// ★ イベントメモ（追加・編集はここに記入）
+const EVENTS = [
+  { date: '2026/07/31', label: '⚠️ 転倒', memo: '鉢を転倒させるアクシデントが発生' },
+];
 
 function csvUrl(gid){ return `${BASE}?gid=${gid}&single=true&output=csv`; }
 
@@ -185,10 +184,6 @@ function render(){
   if(!master.length || !dates.length) return;
   const unit = METRIC_UNIT[currentMetric];
 
-  document.getElementById('chartTitle').textContent = currentMode === 'abs'
-    ? '実測値（測定した生の値）'
-    : '変化量（初回値からの差分）';
-
   const condPairs = {};
   master.forEach(m=>{
     if(!condPairs[m.condId]) condPairs[m.condId]=[];
@@ -202,9 +197,7 @@ function render(){
       const firstVal  = firstDate ? getVal(num,firstDate) : null;
       const data = dates.map(d=>{
         const v = getVal(num,d);
-        if(v===null) return null;
-        if(currentMode === 'abs') return v;
-        if(firstVal===null) return null;
+        if(v===null||firstVal===null) return null;
         return Math.round((v-firstVal)*10)/10;
       });
       const c = COLORS[cond] || {s:'#888',d:'#bbb'};
@@ -229,6 +222,7 @@ function render(){
   if(chartInstance) chartInstance.destroy();
 
   if(baseIdx >= 0){
+    const refData = dates.map((_,i)=> i===baseIdx ? null : null);
     datasets.push({
       label:'基準日(5/30)',
       data: dates.map(()=>null),
@@ -248,11 +242,7 @@ function render(){
 
       plugins:{
         legend:{display:false},
-        tooltip:{callbacks:{label:ctx=>{
-          const v=ctx.parsed.y;
-          const prefix = currentMode==='delta' ? (v>0?'+':'') : '';
-          return ` ${ctx.dataset.label}: ${prefix}${v} ${unit}`;
-        }}},
+        tooltip:{callbacks:{label:ctx=>{const v=ctx.parsed.y;return ` ${ctx.dataset.label}: ${v>0?'+':''}${v} ${unit}`}}},
         annotation:{
           annotations:{
             baseLine:{
@@ -268,7 +258,7 @@ function render(){
         }
       },
       scales:{
-        y:{grid:{color:'rgba(0,0,0,0.06)'},ticks:{color:'#888',callback:v=> currentMode==='delta' ? (v>0?'+':'')+v : v}},
+        y:{grid:{color:'rgba(0,0,0,0.06)'},ticks:{color:'#888',callback:v=>(v>0?'+':'')+v}},
         x:{grid:{color:'rgba(0,0,0,0.04)'},ticks:{color:'#888'}}
       }
     }
@@ -333,6 +323,28 @@ function render(){
   });
 }
 
+  // メモ欄
+  const existingMemo = document.getElementById('memoSection');
+  if(existingMemo) existingMemo.remove();
+
+  if(EVENTS.length > 0){
+    const memoSection = document.createElement('div');
+    memoSection.id = 'memoSection';
+    memoSection.style.cssText = 'margin-top:1.5rem;background:#fff;border-radius:12px;border:0.5px solid #e0e0e0;padding:14px 16px;';
+    memoSection.innerHTML = `
+      <div style="font-size:12px;color:#888;margin-bottom:10px;">📋 実験メモ</div>
+      ${EVENTS.map(ev=>`
+        <div style="display:flex;gap:10px;font-size:13px;padding:6px 0;border-bottom:0.5px solid #f5f5f5;">
+          <span style="color:#bbb;white-space:nowrap;">${ev.date.replace('2026/','')}</span>
+          <span style="color:#e67e00;margin-right:4px;">▼</span>
+          <span style="color:#444;">${ev.memo}</span>
+        </div>
+      `).join('')}
+    `;
+    document.querySelector('.dash').appendChild(memoSection);
+  }
+}
+
 function setRange(r,el){
   currentRange=r;
   document.querySelectorAll('#btnAll,#btnBase').forEach(b=>b.classList.remove('active'));
@@ -342,16 +354,7 @@ function setRange(r,el){
 
 function setMetric(m,el){
   currentMetric=m;
-  document.querySelectorAll('.tab-btn').forEach(b=>{
-    if(b.id!=='btnDelta' && b.id!=='btnAbs' && b.id!=='btnAll' && b.id!=='btnBase') b.classList.remove('active');
-  });
-  el.classList.add('active');
-  render();
-}
-
-function setMode(m,el){
-  currentMode=m;
-  document.querySelectorAll('#btnDelta,#btnAbs').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   el.classList.add('active');
   render();
 }
