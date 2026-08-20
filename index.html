@@ -6,6 +6,7 @@
 <title>成長モニタリングダッシュボード</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/3.0.1/chartjs-plugin-annotation.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f5;color:#1a1a1a;padding:1rem}
@@ -85,7 +86,6 @@ const BASE = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRV6-RNtpsSi0q3kwP
 const GIDS = { master: '342452676', stem: '0', full: '1484510115', height: '461109111' };
 const BASE_DATE = '2026/05/30';
 
-// ★ イベントメモ（追加・編集はここに記入）
 const EVENTS = [
   { date: '2026/07/31', label: '⚠️ 転倒', memo: '鉢を転倒させるアクシデントが発生' },
 ];
@@ -121,9 +121,10 @@ function excelDateToStr(serial){
   return `${d.getUTCFullYear()}/${m}/${day}`;
 }
 
-function fmtDate(d){
-  const m = d.match(/\d+[\/\-](\d+)[\/\-](\d+)/);
-  return m ? `${m[1].padStart(2,'0')}/${m[2].padStart(2,'0')}` : d;
+// YYYY/MM/DD → Date オブジェクト
+function strToDate(s){
+  const [y,m,d] = s.split('/');
+  return new Date(parseInt(y), parseInt(m)-1, parseInt(d));
 }
 
 function parseMeasureSheet(rows){
@@ -204,12 +205,13 @@ function render(){
     pair.forEach((num,i)=>{
       const firstDate = dates.find(d=>getVal(num,d)!==null);
       const firstVal  = firstDate ? getVal(num,firstDate) : null;
+      // x に Date オブジェクト、y に値を持つ {x,y} 形式
       const data = dates.map(d=>{
         const v = getVal(num,d);
-        if(v===null) return null;
-        if(currentMode === 'abs') return v;
-        if(firstVal===null) return null;
-        return Math.round((v-firstVal)*10)/10;
+        if(v===null) return {x: strToDate(d), y: null};
+        if(currentMode === 'abs') return {x: strToDate(d), y: v};
+        if(firstVal===null) return {x: strToDate(d), y: null};
+        return {x: strToDate(d), y: Math.round((v-firstVal)*10)/10};
       });
       const c = COLORS[cond] || {s:'#888',d:'#bbb'};
       datasets.push({
@@ -227,31 +229,26 @@ function render(){
     });
   });
 
-  const baseIdx = dates.indexOf(BASE_DATE);
-
-  // アノテーション構築
+  // アノテーション構築（value に Date オブジェクトを渡す）
   const annotations = {};
 
-  // 基準日の縦線
-  if(baseIdx >= 0){
+  if(dates.includes(BASE_DATE)){
     annotations.baseLine = {
-      type:'line', scaleID:'x', value: baseIdx,
+      type:'line', scaleID:'x', value: strToDate(BASE_DATE),
       borderColor:'rgba(200,0,0,0.5)', borderWidth:1.5, borderDash:[5,4],
       label:{content:'基準日 5/30', display:true, position:'start',
         backgroundColor:'rgba(200,0,0,0.7)', color:'#fff', font:{size:10}, padding:{x:6,y:3}}
     };
   }
 
-  // イベントのアノテーション
   EVENTS.forEach((ev,i)=>{
-    const idx = dates.indexOf(ev.date);
-    if(idx < 0) return;
+    if(!dates.includes(ev.date)) return;
     annotations['ev_line_'+i] = {
-      type:'line', scaleID:'x', value: idx,
+      type:'line', scaleID:'x', value: strToDate(ev.date),
       borderColor:'rgba(230,140,0,0.6)', borderWidth:1.5, borderDash:[4,3],
     };
     annotations['ev_label_'+i] = {
-      type:'label', xValue: idx, yValue: 'max',
+      type:'label', xValue: strToDate(ev.date), yValue: 'max',
       content:['▼', ev.label],
       color:'rgba(200,100,0,0.9)', font:{size:10}, textAlign:'center',
       position:{x:'center', y:'start'}, yAdjust:4,
@@ -261,7 +258,7 @@ function render(){
   if(chartInstance) chartInstance.destroy();
   chartInstance = new Chart(document.getElementById('mainChart'),{
     type:'line',
-    data:{labels:dates.map(fmtDate), datasets},
+    data:{datasets},
     options:{
       responsive:true, maintainAspectRatio:false,
       plugins:{
@@ -274,8 +271,20 @@ function render(){
         annotation:{annotations}
       },
       scales:{
-        y:{grid:{color:'rgba(0,0,0,0.06)'},ticks:{color:'#888',callback:v=>currentMode==='delta'?(v>0?'+':'')+v:v}},
-        x:{grid:{color:'rgba(0,0,0,0.04)'},ticks:{color:'#888'}}
+        y:{
+          grid:{color:'rgba(0,0,0,0.06)'},
+          ticks:{color:'#888',callback:v=>currentMode==='delta'?(v>0?'+':'')+v:v}
+        },
+        x:{
+          type:'time',
+          time:{
+            unit:'day',
+            displayFormats:{ day:'MM/dd' },
+            tooltipFormat:'yyyy/MM/dd'
+          },
+          grid:{color:'rgba(0,0,0,0.04)'},
+          ticks:{color:'#888', maxTicksLimit:12}
+        }
       }
     }
   });
