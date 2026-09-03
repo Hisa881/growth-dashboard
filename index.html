@@ -248,7 +248,8 @@ function render(){
   }
 
   EVENTS.forEach((ev,i)=>{
-    if(!dates.includes(ev.date)) return;
+    const inRange = currentRange === 'base' ? ev.date >= BASE_DATE : true;
+    if(!inRange) return;
     annotations['ev_line_'+i] = {
       type:'line', scaleID:'x', value: strToDate(ev.date),
       borderColor:'rgba(230,140,0,0.6)', borderWidth:1.5, borderDash:[4,3],
