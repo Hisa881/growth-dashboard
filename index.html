@@ -186,7 +186,7 @@ function deltaClass(v){ return v>0?'delta dp':v<0?'delta dn':'delta dz'; }
 function deltaLabel(v){ return v>0?'+'+v:v===0?'±0':''+v; }
 
 function render(){
-  const {master} = state;
+  const master = state.master.filter(m => m.expId === 'EXP-001');
   const dates = currentRange === 'base'
     ? state.dates.filter(d => d >= BASE_DATE)
     : state.dates;
