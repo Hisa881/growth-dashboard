@@ -187,9 +187,11 @@ function deltaLabel(v){ return v>0?'+'+v:v===0?'±0':''+v; }
 
 function render(){
   const master = state.master.filter(m => m.expId === 'EXP-001');
-  const dates = currentRange === 'base'
+  const relevantNums = master.map(m => m.num);
+  let dates = currentRange === 'base'
     ? state.dates.filter(d => d >= BASE_DATE)
     : state.dates;
+  dates = dates.filter(d => relevantNums.some(num => getVal(num, d) !== null));
   if(!master.length || !dates.length) return;
   const unit = METRIC_UNIT[currentMetric];
 
