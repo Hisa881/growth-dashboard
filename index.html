@@ -192,7 +192,10 @@ function render(){
     ? state.dates.filter(d => d >= BASE_DATE)
     : state.dates;
   dates = dates.filter(d => relevantNums.some(num => getVal(num, d) !== null));
-  if(!master.length || !dates.length) return;
+  if(!master.length || !dates.length){
+    document.getElementById('cardsGrid').innerHTML = '<div class="error">対象データが見つかりません（expIdが一致しません）。</div>';
+    return;
+  }
   const unit = METRIC_UNIT[currentMetric];
 
   document.getElementById('chartTitle').textContent = currentMode === 'abs' ? '実測値（測定した生の値）' : '変化量（初回値からの差分）';
